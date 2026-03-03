@@ -1,14 +1,9 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import {
-  generateHexGrid,
-  hexToPixel,
-  hexCorners,
-  pixelToHex,
-  hexKey,
-} from "@/lib/hex";
+import { hexCorners, hexKey, hexToPixel, pixelToHex, generateHexGrid } from "@/lib/hex";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -17,27 +12,53 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// ── Configuration ─────────────────────────────────────────────────────
 const HEX_COLS = 14;
 const HEX_ROWS = 10;
 const HEX_SIZE = 28;
 const GRID_OFFSET_X = 40;
 const GRID_OFFSET_Y = 40;
 
-// Falling dot color — always black for max contrast
 const DOT_COLOR = "#0a0a0a";
-
-// Group colors — all light/saturated, good contrast against black dots
 const GROUP_COLORS = [
-  "#5ec4a8", // teal/mint
-  "#a7d86e", // lime green
-  "#f7e04b", // bright yellow
-  "#e87ea1", // rose pink
-  "#9b8fef", // lavender
-  "#6cc3e0", // sky blue
-  "#f5a755", // warm orange
-  "#f27e63", // coral
+  "#5ec4a8",
+  "#a7d86e",
+  "#f7e04b",
+  "#e87ea1",
+  "#9b8fef",
+  "#6cc3e0",
+  "#f5a755",
+  "#f27e63",
 ];
+
+const COLORS = {
+  accent: "#2d6a4f",
+  accentHover: "#1b4332",
+  accentSoft: "#d8f3dc",
+  bg: "#faf9f6",
+  border: "#e4e0d8",
+  emptyHex: "#f0ece4",
+  emptyHexStroke: "#d8d2c6",
+  muted: "#7a7468",
+  panel: "#ffffff",
+  panelRaised: "#f4f2ee",
+  selectedHex: "#c8e6c9",
+  selectedHexStroke: "#66bb6a",
+  text: "#1a1a2e",
+  textSecondary: "#544e44",
+};
+
+const cardClass =
+  "rounded-[18px] border border-[#e4e0d8] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)]";
+const sectionClass = `${cardClass} p-4 sm:p-5`;
+const headingClass =
+  "mb-1.5 font-mono text-xs font-bold uppercase tracking-[0.16em] text-[#544e44]";
+const subheadingClass =
+  "mb-1 font-mono text-[0.8rem] font-bold uppercase tracking-[0.16em] text-[#544e44]";
+const descriptionClass = "text-sm leading-6 text-[#7a7468]";
+const inputClass =
+  "min-w-0 flex-1 rounded-[12px] border border-[#e4e0d8] bg-white px-3 py-2 font-mono text-sm text-[#1a1a2e] outline-none transition focus:border-[#2d6a4f] focus:ring-4 focus:ring-[#d8f3dc] disabled:cursor-not-allowed disabled:opacity-50";
+const buttonBaseClass =
+  "inline-flex items-center justify-center rounded-[12px] px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40";
 
 interface HexGroup {
   value: number;
@@ -64,8 +85,6 @@ interface PresetConfig {
   uniA: number;
   uniB: number;
 }
-
-// ── Distribution Math ─────────────────────────────────────────────────
 
 function binomialCoeff(n: number, k: number): number {
   if (k < 0 || k > n) return 0;
@@ -113,9 +132,6 @@ function getDistributionBins(
   }
 }
 
-/**
- * Allocate totalHexes cells to bins proportionally (largest-remainder rounding).
- */
 function allocateHexes(
   bins: { value: number; prob: number }[],
   totalHexes: number
@@ -127,9 +143,8 @@ function allocateHexes(
   }));
 
   const remaining = totalHexes - raw.reduce((s, r) => s + r.count, 0);
-
-  // Give one extra hex to bins with the largest fractional remainders
   const sorted = [...raw].sort((a, b) => b.remainder - a.remainder);
+
   for (let i = 0; i < remaining && i < sorted.length; i++) {
     sorted[i].count++;
   }
@@ -137,43 +152,52 @@ function allocateHexes(
   return raw.map((r) => ({ value: r.value, count: r.count }));
 }
 
-// ── Sub-components ────────────────────────────────────────────────────
-
 function LegendTable({ groups }: { groups: HexGroup[] }) {
   if (groups.length === 0) {
     return (
-      <div className="viz-legend-empty">
-        <p>
-          Paint hexagons on the grid, then assign a numeric value to define your
-          random variable.
-        </p>
+      <div className="rounded-[16px] border border-dashed border-[#e4e0d8] bg-[#f4f2ee] px-4 py-4 text-sm leading-6 text-[#7a7468]">
+        Paint hexagons on the grid, then assign a numeric value to define your
+        random variable.
       </div>
     );
   }
+
   return (
-    <table className="viz-legend-table">
-      <thead>
-        <tr>
-          <th>Color</th>
-          <th>Value</th>
-          <th>Hexes</th>
-        </tr>
-      </thead>
-      <tbody>
-        {groups.map((g, i) => (
-          <tr key={i}>
-            <td>
-              <span
-                className="viz-color-swatch"
-                style={{ backgroundColor: g.color }}
-              />
-            </td>
-            <td className="viz-value-cell">{g.value}</td>
-            <td className="viz-count-cell">{g.hexes.size}</td>
+    <div className="overflow-hidden rounded-[16px] border border-[#e4e0d8] bg-white">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="bg-[#f4f2ee]">
+            <th className="px-3 py-2 text-left font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-[#7a7468]">
+              Color
+            </th>
+            <th className="px-3 py-2 text-left font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-[#7a7468]">
+              Value
+            </th>
+            <th className="px-3 py-2 text-left font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-[#7a7468]">
+              Hexes
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {groups.map((group) => (
+            <tr key={`${group.value}-${group.color}`} className="border-t border-[#e4e0d8]">
+              <td className="px-3 py-2.5">
+                <span
+                  className="inline-block h-[22px] w-[22px] rounded-[4px] align-middle shadow-[inset_0_0_0_1px_rgba(0,0,0,0.1)]"
+                  style={{ backgroundColor: group.color }}
+                />
+              </td>
+              <td className="px-3 py-2.5 font-mono text-[0.95rem] font-bold text-[#1a1a2e]">
+                {group.value}
+              </td>
+              <td className="px-3 py-2.5 text-[0.82rem] text-[#7a7468]">
+                {group.hexes.size}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -189,35 +213,33 @@ function DistributionChart({
   const values = groups.map((g) => g.value).sort((a, b) => a - b);
   const uniqueValues = groups.length > 0 ? [...new Set(values)] : [0];
   const isPlaceholder = groups.length === 0;
+  const valueToColor = new Map(groups.map((group) => [group.value, group.color]));
 
   const maxFreq =
     isPlaceholder
       ? 1
       : totalSamples > 0
-      ? Math.max(
-          ...uniqueValues.map(
-            (v) => (sampleCounts.get(v) ?? 0) / totalSamples
-          ),
-          0.05
-        )
-      : 1;
+        ? Math.max(
+            ...uniqueValues.map((value) => (sampleCounts.get(value) ?? 0) / totalSamples),
+            0.05
+          )
+        : 1;
 
-  const chartH = 200;
-  const chartW = Math.max(uniqueValues.length * 64, 280);
+  const chartH = 220;
+  const chartW = Math.max(uniqueValues.length * 72, 320);
   const barW = 40;
-  const gap = 64;
+  const gap = 72;
 
   return (
-    <div className="viz-chart-wrap viz-chart-wrap--full">
-      <div className="viz-chart-label">Empirical Distribution</div>
+    <div className={cn(sectionClass, "w-full min-w-0")}>
+      <div className={headingClass}>Empirical Distribution</div>
       <svg
         width="100%"
         height={chartH + 48}
         viewBox={`0 0 ${chartW + 48} ${chartH + 48}`}
-        preserveAspectRatio="xMidYMid meet"
-        className="viz-chart-svg"
+        preserveAspectRatio="none"
+        className="block min-w-0 overflow-visible"
       >
-        {/* Y axis */}
         <line
           x1={36}
           y1={4}
@@ -227,7 +249,6 @@ function DistributionChart({
           strokeWidth={1.5}
           opacity={0.3}
         />
-        {/* X axis */}
         <line
           x1={36}
           y1={chartH + 4}
@@ -237,15 +258,19 @@ function DistributionChart({
           strokeWidth={1.5}
           opacity={0.3}
         />
-        {/* Y labels */}
-        <text x={30} y={10} textAnchor="end" className="viz-chart-text">
+        <text
+          x={30}
+          y={10}
+          textAnchor="end"
+          className="fill-[#7a7468] font-mono text-[10px]"
+        >
           1.0
         </text>
         <text
           x={30}
           y={chartH / 2 + 4}
           textAnchor="end"
-          className="viz-chart-text"
+          className="fill-[#7a7468] font-mono text-[10px]"
         >
           0.5
         </text>
@@ -253,34 +278,33 @@ function DistributionChart({
           x={30}
           y={chartH + 8}
           textAnchor="end"
-          className="viz-chart-text"
+          className="fill-[#7a7468] font-mono text-[10px]"
         >
           0.0
         </text>
-        {/* Bars */}
-        {uniqueValues.map((v, i) => {
-          const count = sampleCounts.get(v) ?? 0;
+        {uniqueValues.map((value, index) => {
+          const count = sampleCounts.get(value) ?? 0;
           const freq = isPlaceholder ? 1 : totalSamples > 0 ? count / totalSamples : 0;
           const barH = (freq / Math.max(maxFreq, 1)) * chartH;
-          const x = 44 + i * gap;
-          const groupForColor = groups.find((g) => g.value === v);
+          const x = 44 + index * gap;
+
           return (
-            <g key={v}>
+            <g key={value}>
               <rect
                 x={x}
                 y={chartH + 4 - barH}
                 width={barW}
                 height={Math.max(barH, 0)}
-                fill={groupForColor?.color ?? "var(--hex-empty)"}
+                fill={valueToColor.get(value) ?? COLORS.emptyHex}
                 rx={3}
-                opacity={isPlaceholder ? 1 : 0.85}
+                opacity={isPlaceholder ? 1 : 0.88}
               />
               {!isPlaceholder && totalSamples > 0 && freq > 0.02 && (
                 <text
                   x={x + barW / 2}
-                  y={chartH - barH - 2}
+                  y={chartH - barH - 3}
                   textAnchor="middle"
-                  className="viz-chart-text viz-chart-freq"
+                  className="fill-[#1a1a2e] font-mono text-[9px] font-bold"
                 >
                   {freq.toFixed(2)}
                 </text>
@@ -289,9 +313,9 @@ function DistributionChart({
                 x={x + barW / 2}
                 y={chartH + 22}
                 textAnchor="middle"
-                className="viz-chart-text viz-chart-val"
+                className="fill-[#544e44] font-mono text-[11px] font-bold"
               >
-                {v}
+                {value}
               </text>
             </g>
           );
@@ -301,38 +325,18 @@ function DistributionChart({
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────
-
 export function RandomVariableViz() {
   const hexes = useMemo(() => generateHexGrid(HEX_COLS, HEX_ROWS), []);
   const totalHexes = hexes.length;
 
-  // ── State ──────────────────────────────────────────────────────────
   const [groups, setGroups] = useState<HexGroup[]>([]);
   const [selectedHexes, setSelectedHexes] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const [sampleCounts, setSampleCounts] = useState<Map<number, number>>(
-    new Map()
-  );
+  const [sampleCounts, setSampleCounts] = useState<Map<number, number>>(new Map());
   const [totalSamples, setTotalSamples] = useState(0);
   const [isSampling, setIsSampling] = useState(false);
   const [sampleDots, setSampleDots] = useState<SampleDot[]>([]);
-  const samplingRef = useRef(false);
-  const dotIdRef = useRef(0);
-  const svgRef = useRef<SVGSVGElement>(null);
-
-  // Drag mode: paint or erase, determined by first cell on mousedown
-  const dragModeRef = useRef<"paint" | "erase" | null>(null);
-  const dragVisitedRef = useRef<Set<string>>(new Set());
-
-  // Keep a ref to selectedHexes so drag handler stays stable
-  const selectedHexesRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    selectedHexesRef.current = selectedHexes;
-  }, [selectedHexes]);
-
-  // Preset distribution controls
   const [preset, setPreset] = useState<PresetConfig>({
     type: "none",
     binN: 5,
@@ -341,6 +345,17 @@ export function RandomVariableViz() {
     uniB: 4,
   });
 
+  const samplingRef = useRef(false);
+  const dotIdRef = useRef(0);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragModeRef = useRef<"paint" | "erase" | null>(null);
+  const dragVisitedRef = useRef<Set<string>>(new Set());
+  const selectedHexesRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    selectedHexesRef.current = selectedHexes;
+  }, [selectedHexes]);
+
   const resetSamplingState = useCallback(() => {
     setSampleCounts(new Map());
     setTotalSamples(0);
@@ -348,64 +363,50 @@ export function RandomVariableViz() {
     setIsSampling(false);
   }, []);
 
-  // Assigned hex → group index lookup (memo for render, ref for handlers)
   const assignedHexMap = useMemo(() => {
     const map = new Map<string, number>();
-    groups.forEach((g, idx) => {
-      g.hexes.forEach((h) => map.set(h, idx));
+    groups.forEach((group, index) => {
+      group.hexes.forEach((hex) => map.set(hex, index));
     });
     return map;
   }, [groups]);
+
   const assignedHexMapRef = useRef(assignedHexMap);
   useEffect(() => {
     assignedHexMapRef.current = assignedHexMap;
   }, [assignedHexMap]);
 
-  // ── Grid dimensions — symmetric padding ────────────────────────────
-  // Content spans from OFFSET - SIZE (leftmost vertex) to
-  // OFFSET + 1.5*SIZE*(COLS-1) + SIZE (rightmost vertex).
-  // 2*OFFSET + center-to-center span = equal margin on both sides.
   const gridW = GRID_OFFSET_X * 2 + HEX_SIZE * 1.5 * (HEX_COLS - 1);
-  const gridH =
-    GRID_OFFSET_Y * 2 + HEX_SIZE * Math.sqrt(3) * (HEX_ROWS - 1);
-
-  // Bounds for random dot spawning (hex-center range)
+  const gridH = GRID_OFFSET_Y * 2 + HEX_SIZE * Math.sqrt(3) * (HEX_ROWS - 1);
   const contentLeft = GRID_OFFSET_X;
   const contentRight = GRID_OFFSET_X + HEX_SIZE * 1.5 * (HEX_COLS - 1);
   const contentTop = GRID_OFFSET_Y;
-  const contentBottom =
-    GRID_OFFSET_Y + HEX_SIZE * Math.sqrt(3) * (HEX_ROWS - 1);
+  const contentBottom = GRID_OFFSET_Y + HEX_SIZE * Math.sqrt(3) * (HEX_ROWS - 1);
 
-  // ── Hex interaction ────────────────────────────────────────────────
   const getHexFromEvent = useCallback(
-    (e: React.MouseEvent<SVGSVGElement>) => {
+    (event: React.MouseEvent<SVGSVGElement>) => {
       const svg = svgRef.current;
       if (!svg) return null;
+
       const rect = svg.getBoundingClientRect();
       const scaleX = svg.viewBox.baseVal.width / rect.width;
       const scaleY = svg.viewBox.baseVal.height / rect.height;
-      const px = (e.clientX - rect.left) * scaleX;
-      const py = (e.clientY - rect.top) * scaleY;
-      return pixelToHex(
-        px,
-        py,
-        HEX_SIZE,
-        hexes,
-        GRID_OFFSET_X,
-        GRID_OFFSET_Y
-      );
+      const px = (event.clientX - rect.left) * scaleX;
+      const py = (event.clientY - rect.top) * scaleY;
+
+      return pixelToHex(px, py, HEX_SIZE, hexes, GRID_OFFSET_X, GRID_OFFSET_Y);
     },
     [hexes]
   );
 
   const handleMouseDown = useCallback(
-    (e: React.MouseEvent<SVGSVGElement>) => {
-      const hex = getHexFromEvent(e);
+    (event: React.MouseEvent<SVGSVGElement>) => {
+      const hex = getHexFromEvent(event);
       if (!hex) return;
+
       const key = hexKey(hex.col, hex.row);
       if (assignedHexMapRef.current.has(key)) return;
 
-      // Determine drag mode from first-touched cell
       const isSelected = selectedHexesRef.current.has(key);
       dragModeRef.current = isSelected ? "erase" : "paint";
       dragVisitedRef.current = new Set([key]);
@@ -422,16 +423,16 @@ export function RandomVariableViz() {
   );
 
   const handleMouseMove = useCallback(
-    (e: React.MouseEvent<SVGSVGElement>) => {
+    (event: React.MouseEvent<SVGSVGElement>) => {
       if (!isDragging || !dragModeRef.current) return;
-      const hex = getHexFromEvent(e);
+
+      const hex = getHexFromEvent(event);
       if (!hex) return;
+
       const key = hexKey(hex.col, hex.row);
-      if (assignedHexMapRef.current.has(key)) return;
-      if (dragVisitedRef.current.has(key)) return;
+      if (assignedHexMapRef.current.has(key) || dragVisitedRef.current.has(key)) return;
 
       dragVisitedRef.current.add(key);
-
       setSelectedHexes((prev) => {
         const next = new Set(prev);
         if (dragModeRef.current === "erase") next.delete(key);
@@ -439,7 +440,7 @@ export function RandomVariableViz() {
         return next;
       });
     },
-    [isDragging, getHexFromEvent]
+    [getHexFromEvent, isDragging]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -448,48 +449,42 @@ export function RandomVariableViz() {
     dragVisitedRef.current = new Set();
   }, []);
 
-  // ── Assign value ──────────────────────────────────────────────────
   const handleAssign = useCallback(() => {
-    const val = parseFloat(inputValue);
-    if (isNaN(val) || selectedHexes.size === 0) return;
+    const value = parseFloat(inputValue);
+    if (Number.isNaN(value) || selectedHexes.size === 0) return;
 
     const colorIdx = groups.length % GROUP_COLORS.length;
     setGroups((prev) => [
       ...prev,
       {
-        value: val,
+        value,
         color: GROUP_COLORS[colorIdx],
         hexes: new Set(selectedHexes),
       },
     ]);
     setSelectedHexes(new Set());
     setInputValue("");
-  }, [inputValue, selectedHexes, groups.length]);
+  }, [groups.length, inputValue, selectedHexes]);
 
-  // ── Apply preset ──────────────────────────────────────────────────
   const handleApplyPreset = useCallback(() => {
     if (preset.type === "none") return;
     const bins = getDistributionBins(preset);
     if (bins.length === 0) return;
 
     const allocs = allocateHexes(bins, totalHexes);
-
-    // Assign hexes in stable column-major order
-    const newGroups: HexGroup[] = [];
+    const nextGroups: HexGroup[] = [];
     let hexIdx = 0;
     let colorIdx = 0;
 
     for (const alloc of allocs) {
       if (alloc.count === 0) continue;
+
       const groupHexes = new Set<string>();
-      for (
-        let j = 0;
-        j < alloc.count && hexIdx < hexes.length;
-        j++, hexIdx++
-      ) {
+      for (let j = 0; j < alloc.count && hexIdx < hexes.length; j++, hexIdx++) {
         groupHexes.add(hexKey(hexes[hexIdx].col, hexes[hexIdx].row));
       }
-      newGroups.push({
+
+      nextGroups.push({
         value: alloc.value,
         color: GROUP_COLORS[colorIdx % GROUP_COLORS.length],
         hexes: groupHexes,
@@ -497,37 +492,23 @@ export function RandomVariableViz() {
       colorIdx++;
     }
 
-    setGroups(newGroups);
+    setGroups(nextGroups);
     setSelectedHexes(new Set());
     resetSamplingState();
-  }, [preset, totalHexes, hexes, resetSamplingState]);
+  }, [hexes, preset, resetSamplingState, totalHexes]);
 
-  // ── Sampling — falling dots ────────────────────────────────────────
   const doSample = useCallback(() => {
     if (groups.length === 0) return;
 
-    // Random landing position within grid content area
-    const landX =
-      contentLeft + Math.random() * (contentRight - contentLeft);
-    const landY =
-      contentTop + Math.random() * (contentBottom - contentTop);
-
-    // Resolve to nearest hex (nearest-center tiebreak on borders)
-    const hex = pixelToHex(
-      landX,
-      landY,
-      HEX_SIZE,
-      hexes,
-      GRID_OFFSET_X,
-      GRID_OFFSET_Y
-    );
+    const landX = contentLeft + Math.random() * (contentRight - contentLeft);
+    const landY = contentTop + Math.random() * (contentBottom - contentTop);
+    const hex = pixelToHex(landX, landY, HEX_SIZE, hexes, GRID_OFFSET_X, GRID_OFFSET_Y);
     if (!hex) return;
 
     const key = hexKey(hex.col, hex.row);
     const groupIdx = assignedHexMapRef.current.get(key);
     const isHit = groupIdx !== undefined;
 
-    // Count only assigned-hex hits
     if (isHit) {
       const group = groups[groupIdx];
       setSampleCounts((prev) => {
@@ -538,17 +519,13 @@ export function RandomVariableViz() {
       setTotalSamples((prev) => prev + 1);
     }
 
-    // Fall duration scales with depth so upper dots arrive sooner
     const fallDuration = 0.3 + 0.15 * (landY / gridH);
-
     const dotId = dotIdRef.current++;
-    const dotColor = DOT_COLOR;
-
     const newDot: SampleDot = {
       id: dotId,
       x: landX,
       y: landY,
-      color: dotColor,
+      color: DOT_COLOR,
       phase: "falling",
       isHit,
       fallDuration,
@@ -557,65 +534,50 @@ export function RandomVariableViz() {
     setSampleDots((prev) => [...prev.slice(-24), newDot]);
 
     if (isHit) {
-      // Falling → landed → fading → remove
       setTimeout(() => {
         setSampleDots((prev) =>
-          prev.map((d) =>
-            d.id === dotId ? { ...d, phase: "landed" as const } : d
-          )
+          prev.map((dot) => (dot.id === dotId ? { ...dot, phase: "landed" } : dot))
         );
       }, fallDuration * 1000);
 
       setTimeout(() => {
         setSampleDots((prev) =>
-          prev.map((d) =>
-            d.id === dotId ? { ...d, phase: "fading" as const } : d
-          )
+          prev.map((dot) => (dot.id === dotId ? { ...dot, phase: "fading" } : dot))
         );
       }, (fallDuration + 0.3) * 1000);
 
       setTimeout(() => {
-        setSampleDots((prev) => prev.filter((d) => d.id !== dotId));
+        setSampleDots((prev) => prev.filter((dot) => dot.id !== dotId));
       }, (fallDuration + 0.6) * 1000);
     } else {
-      // Non-hits: fall then fade quickly
       setTimeout(() => {
         setSampleDots((prev) =>
-          prev.map((d) =>
-            d.id === dotId ? { ...d, phase: "fading" as const } : d
-          )
+          prev.map((dot) => (dot.id === dotId ? { ...dot, phase: "fading" } : dot))
         );
       }, fallDuration * 1000);
 
       setTimeout(() => {
-        setSampleDots((prev) => prev.filter((d) => d.id !== dotId));
+        setSampleDots((prev) => prev.filter((dot) => dot.id !== dotId));
       }, (fallDuration + 0.25) * 1000);
     }
-  }, [
-    groups,
-    hexes,
-    contentLeft,
-    contentRight,
-    contentTop,
-    contentBottom,
-    gridH,
-  ]);
+  }, [contentBottom, contentLeft, contentRight, contentTop, gridH, groups, hexes]);
 
   useEffect(() => {
     if (!isSampling) return;
+
     samplingRef.current = true;
     const interval = setInterval(() => {
       if (samplingRef.current) doSample();
     }, 180);
+
     return () => {
       clearInterval(interval);
       samplingRef.current = false;
     };
-  }, [isSampling, doSample]);
+  }, [doSample, isSampling]);
 
   const handleStartSampling = useCallback(() => {
-    const hasAssigned = groups.some((g) => g.hexes.size > 0);
-    if (!hasAssigned) return;
+    if (!groups.some((group) => group.hexes.size > 0)) return;
     setIsSampling(true);
   }, [groups]);
 
@@ -628,42 +590,34 @@ export function RandomVariableViz() {
     setSelectedHexes(new Set());
     resetSamplingState();
     setInputValue("");
-    setPreset((p) => ({ ...p, type: "none" }));
+    setPreset((prev) => ({ ...prev, type: "none" }));
   }, [resetSamplingState]);
 
-  // ── Computed ──────────────────────────────────────────────────────
-  const assignedCount = groups.reduce((sum, g) => sum + g.hexes.size, 0);
+  const assignedCount = groups.reduce((sum, group) => sum + group.hexes.size, 0);
   const unassignedCount = totalHexes - assignedCount;
 
-  // ── Render ────────────────────────────────────────────────────────
   return (
-    <div className="viz-layout">
-      <div className="viz-container">
-        {/* Left panel */}
-        <div className="viz-panel-left">
-          <div className="viz-section">
-            <h2 className="viz-heading">Random Variable</h2>
-            <p className="viz-description">
+    <div className="flex flex-col gap-8">
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+        <div className="flex min-w-0 flex-col gap-5">
+          <div className={sectionClass}>
+            <h2 className={headingClass}>Random Variable</h2>
+            <p className={descriptionClass}>
               Paint hexagons on the grid to select outcomes, then assign a numeric
-              value. This defines a random variable on a uniform probability
-              space.
+              value. This defines a random variable on a uniform probability space.
             </p>
           </div>
 
-          {/* ── Preset Distributions ─────────────────────────────────── */}
-          <div className="viz-section viz-preset-section">
-            <h3 className="viz-subheading">Preset Distributions</h3>
-            <div className="viz-preset-controls">
+          <div className={cn(sectionClass, "border-l-[3px] border-l-[#d8f3dc]")}>
+            <h3 className={subheadingClass}>Preset Distributions</h3>
+            <div className="mt-2 flex flex-col gap-2">
               <Select
                 value={preset.type}
-                onValueChange={(val) =>
-                  setPreset((p) => ({
-                    ...p,
-                    type: val as PresetType,
-                  }))
+                onValueChange={(value) =>
+                  setPreset((prev) => ({ ...prev, type: value as PresetType }))
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full border-[#e4e0d8] bg-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -676,27 +630,24 @@ export function RandomVariableViz() {
               </Select>
 
               {preset.type === "binomial" && (
-                <div className="viz-preset-params">
-                  <label className="viz-param-label">
+                <div className="flex flex-wrap gap-3">
+                  <label className="flex items-center gap-1.5 font-mono text-[0.78rem] font-bold uppercase tracking-[0.14em] text-[#7a7468]">
                     n
                     <input
                       type="number"
                       min={1}
                       max={20}
                       value={preset.binN}
-                      onChange={(e) =>
-                        setPreset((p) => ({
-                          ...p,
-                          binN: Math.max(
-                            1,
-                            Math.min(20, parseInt(e.target.value) || 1)
-                          ),
+                      onChange={(event) =>
+                        setPreset((prev) => ({
+                          ...prev,
+                          binN: Math.max(1, Math.min(20, parseInt(event.target.value) || 1)),
                         }))
                       }
-                      className="viz-input viz-input-sm"
+                      className={cn(inputClass, "h-9 w-16 flex-none px-2.5 py-1.5 text-[0.82rem]")}
                     />
                   </label>
-                  <label className="viz-param-label">
+                  <label className="flex items-center gap-1.5 font-mono text-[0.78rem] font-bold uppercase tracking-[0.14em] text-[#7a7468]">
                     p
                     <input
                       type="number"
@@ -704,49 +655,46 @@ export function RandomVariableViz() {
                       max={1}
                       step={0.05}
                       value={preset.binP}
-                      onChange={(e) =>
-                        setPreset((p) => ({
-                          ...p,
-                          binP: Math.max(
-                            0,
-                            Math.min(1, parseFloat(e.target.value) || 0)
-                          ),
+                      onChange={(event) =>
+                        setPreset((prev) => ({
+                          ...prev,
+                          binP: Math.max(0, Math.min(1, parseFloat(event.target.value) || 0)),
                         }))
                       }
-                      className="viz-input viz-input-sm"
+                      className={cn(inputClass, "h-9 w-16 flex-none px-2.5 py-1.5 text-[0.82rem]")}
                     />
                   </label>
                 </div>
               )}
 
               {preset.type === "uniform" && (
-                <div className="viz-preset-params">
-                  <label className="viz-param-label">
+                <div className="flex flex-wrap gap-3">
+                  <label className="flex items-center gap-1.5 font-mono text-[0.78rem] font-bold uppercase tracking-[0.14em] text-[#7a7468]">
                     a
                     <input
                       type="number"
                       value={preset.uniA}
-                      onChange={(e) =>
-                        setPreset((p) => ({
-                          ...p,
-                          uniA: parseInt(e.target.value) || 0,
+                      onChange={(event) =>
+                        setPreset((prev) => ({
+                          ...prev,
+                          uniA: parseInt(event.target.value) || 0,
                         }))
                       }
-                      className="viz-input viz-input-sm"
+                      className={cn(inputClass, "h-9 w-16 flex-none px-2.5 py-1.5 text-[0.82rem]")}
                     />
                   </label>
-                  <label className="viz-param-label">
+                  <label className="flex items-center gap-1.5 font-mono text-[0.78rem] font-bold uppercase tracking-[0.14em] text-[#7a7468]">
                     b
                     <input
                       type="number"
                       value={preset.uniB}
-                      onChange={(e) =>
-                        setPreset((p) => ({
-                          ...p,
-                          uniB: parseInt(e.target.value) || 1,
+                      onChange={(event) =>
+                        setPreset((prev) => ({
+                          ...prev,
+                          uniB: parseInt(event.target.value) || 1,
                         }))
                       }
-                      className="viz-input viz-input-sm"
+                      className={cn(inputClass, "h-9 w-16 flex-none px-2.5 py-1.5 text-[0.82rem]")}
                     />
                   </label>
                 </div>
@@ -755,10 +703,11 @@ export function RandomVariableViz() {
               {preset.type !== "none" && (
                 <button
                   onClick={handleApplyPreset}
-                  className="viz-btn viz-btn-assign"
-                  disabled={
-                    preset.type === "uniform" && preset.uniA > preset.uniB
-                  }
+                  className={cn(
+                    buttonBaseClass,
+                    "w-full bg-[#2d6a4f] text-white hover:bg-[#1b4332]"
+                  )}
+                  disabled={preset.type === "uniform" && preset.uniA > preset.uniB}
                 >
                   Apply Preset
                 </button>
@@ -768,40 +717,44 @@ export function RandomVariableViz() {
 
           <LegendTable groups={groups} />
 
-          {/* Unassigned hex info */}
-          <div className="viz-hex-info">
-            <span className="viz-hex-info-swatch viz-hex-unassigned" />
+          <div className="flex items-center gap-2 py-1 text-[0.82rem] text-[#7a7468]">
+            <span
+              className="inline-block h-[14px] w-[14px] rounded-[3px] shadow-[inset_0_0_0_1px_#d8d2c6]"
+              style={{ backgroundColor: COLORS.emptyHex }}
+            />
             <span>
               {unassignedCount} unassigned
               {selectedHexes.size > 0 && (
                 <>
                   {" "}
-                  · <strong>{selectedHexes.size} selected</strong>
+                  · <strong className="font-semibold text-[#1a1a2e]">{selectedHexes.size} selected</strong>
                 </>
               )}
             </span>
           </div>
 
-          {/* Assignment controls */}
-          <div className="viz-assign-controls">
+          <div className="flex flex-wrap items-stretch gap-2 max-[1100px]:[&>*]:basis-full">
             <input
               type="number"
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              onChange={(event) => setInputValue(event.target.value)}
               placeholder="Value…"
-              className="viz-input"
+              className={inputClass}
               disabled={selectedHexes.size === 0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleAssign();
+              onKeyDown={(event) => {
+                if (event.key === "Enter") handleAssign();
               }}
             />
             <button
               onClick={handleAssign}
-              className="viz-btn viz-btn-assign"
+              className={cn(
+                buttonBaseClass,
+                "shrink-0 bg-[#2d6a4f] text-white hover:bg-[#1b4332]"
+              )}
               disabled={
                 selectedHexes.size === 0 ||
                 inputValue === "" ||
-                isNaN(parseFloat(inputValue))
+                Number.isNaN(parseFloat(inputValue))
               }
             >
               Assign Value
@@ -809,20 +762,18 @@ export function RandomVariableViz() {
           </div>
         </div>
 
-        {/* Right panel — workspace */}
-        <div className="viz-panel-right">
-          <div className="viz-grid-frame">
+        <div className={cn(cardClass, "min-w-0 p-4")}>
+          <div className="rounded-[16px] border border-[#e4e0d8] bg-[linear-gradient(180deg,#fff_0%,#faf8f3_100%)] p-3">
             <svg
               ref={svgRef}
               viewBox={`0 0 ${gridW} ${gridH}`}
-              className="viz-hex-svg"
+              className="block h-auto w-full cursor-crosshair select-none"
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
             >
               <defs>
-                {/* Circular glow — generous filter region prevents square clipping */}
                 <filter
                   id="dot-glow"
                   x="-100%"
@@ -846,21 +797,20 @@ export function RandomVariableViz() {
                 const key = hexKey(hex.col, hex.row);
                 const isSelected = selectedHexes.has(key);
                 const groupIdx = assignedHexMap.get(key);
-                const isAssigned = groupIdx !== undefined;
-                const group = isAssigned ? groups[groupIdx] : null;
+                const group = groupIdx !== undefined ? groups[groupIdx] : null;
 
-                let fill = "var(--hex-empty)";
-                let strokeColor = "var(--hex-stroke)";
-                let strokeW = 1;
+                let fill = COLORS.emptyHex;
+                let strokeColor = COLORS.emptyHexStroke;
+                let strokeWidth = 1;
 
-                if (isAssigned && group) {
+                if (group) {
                   fill = group.color;
                   strokeColor = group.color;
-                  strokeW = 1.5;
+                  strokeWidth = 1.5;
                 } else if (isSelected) {
-                  fill = "var(--hex-selected)";
-                  strokeColor = "var(--hex-selected-stroke)";
-                  strokeW = 2;
+                  fill = COLORS.selectedHex;
+                  strokeColor = COLORS.selectedHexStroke;
+                  strokeWidth = 2;
                 }
 
                 return (
@@ -869,15 +819,14 @@ export function RandomVariableViz() {
                     points={hexCorners(cx, cy, HEX_SIZE - 1.5)}
                     fill={fill}
                     stroke={strokeColor}
-                    strokeWidth={strokeW}
-                    className="viz-hex"
+                    strokeWidth={strokeWidth}
+                    className="cursor-pointer transition-[fill,stroke,filter] duration-150 hover:brightness-95 motion-reduce:transition-none"
                     data-col={hex.col}
                     data-row={hex.row}
                   />
                 );
               })}
 
-              {/* Falling sample dots */}
               {sampleDots.map((dot) => (
                 <motion.circle
                   key={dot.id}
@@ -886,24 +835,13 @@ export function RandomVariableViz() {
                   r={5}
                   fill={dot.color}
                   initial={{ y: -(dot.y - 5), opacity: 0.85 }}
-                  animate={{
-                    y: 0,
-                    opacity:
-                      dot.phase === "fading"
-                        ? 0
-                        : 0.9,
-                  }}
+                  animate={{ y: 0, opacity: dot.phase === "fading" ? 0 : 0.9 }}
                   transition={{
-                    y: {
-                      duration: dot.fallDuration,
-                      ease: [0.42, 0, 1, 1],
-                    },
-                    opacity: {
-                      duration: dot.phase === "fading" ? 0.25 : 0.15,
-                    },
+                    y: { duration: dot.fallDuration, ease: [0.42, 0, 1, 1] },
+                    opacity: { duration: dot.phase === "fading" ? 0.25 : 0.15 },
                   }}
                   filter="url(#dot-glow)"
-                  className="viz-sample-dot"
+                  className="pointer-events-none [transform-box:fill-box] [transform-origin:center]"
                 />
               ))}
             </svg>
@@ -911,19 +849,19 @@ export function RandomVariableViz() {
         </div>
       </div>
 
-      <div className="viz-results-row">
-        <div className="viz-results-sidebar">
-          <div className="viz-section viz-sample-section">
-            <h3 className="viz-subheading">Sampling</h3>
-            <p className="viz-description">
-              Sample from the probability space to generate the empirical
-              distribution of your random variable.
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+        <div className="max-w-[340px] lg:max-w-none">
+          <div className={cn(sectionClass, "h-full border-l-[3px] border-l-[#2d6a4f]")}>
+            <h3 className={subheadingClass}>Sampling</h3>
+            <p className={descriptionClass}>
+              Sample from the probability space to generate the empirical distribution
+              of your random variable.
             </p>
-            <div className="viz-sample-controls">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {!isSampling ? (
                 <button
                   onClick={handleStartSampling}
-                  className="viz-btn viz-btn-sample"
+                  className={cn(buttonBaseClass, "bg-[#1a1a2e] text-[#faf9f6] hover:bg-[#2a2a3e]")}
                   disabled={assignedCount === 0}
                 >
                   Sample Distribution
@@ -931,25 +869,32 @@ export function RandomVariableViz() {
               ) : (
                 <button
                   onClick={handleStopSampling}
-                  className="viz-btn viz-btn-pause"
+                  className={cn(buttonBaseClass, "bg-[#e65100] text-white hover:bg-[#bf360c]")}
                 >
                   Pause
                 </button>
               )}
-              <button onClick={handleReset} className="viz-btn viz-btn-reset">
+              <button
+                onClick={handleReset}
+                className={cn(
+                  buttonBaseClass,
+                  "border border-[#e4e0d8] bg-[#f4f2ee] text-[#544e44] hover:border-[#d32f2f] hover:bg-[#ffebee] hover:text-[#d32f2f]"
+                )}
+              >
                 Reset
               </button>
-              <span className="viz-sample-count">n = {totalSamples}</span>
+              <span className="ml-auto min-w-max font-mono text-[0.78rem] text-[#7a7468] max-sm:w-full max-sm:ml-0">
+                n = {totalSamples}
+              </span>
             </div>
           </div>
         </div>
-        <div className="viz-results-main">
-          <DistributionChart
-            groups={groups}
-            sampleCounts={sampleCounts}
-            totalSamples={totalSamples}
-          />
-        </div>
+
+        <DistributionChart
+          groups={groups}
+          sampleCounts={sampleCounts}
+          totalSamples={totalSamples}
+        />
       </div>
     </div>
   );
