@@ -1,17 +1,15 @@
 import type { Metadata } from "next";
-import { Space_Mono, DM_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const spaceMono = Space_Mono({
-  variable: "--font-display",
+const geistSans = Geist({
+  variable: "--font-geist-sans",
   subsets: ["latin"],
-  weight: ["400", "700"],
 });
 
-const dmSans = DM_Sans({
-  variable: "--font-body",
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -61,7 +59,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${spaceMono.variable} ${dmSans.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} bg-background text-foreground antialiased`}>
         {children}
       </body>
     </html>
