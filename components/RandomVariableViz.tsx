@@ -186,13 +186,14 @@ function DistributionChart({
   sampleCounts: Map<number, number>;
   totalSamples: number;
 }) {
-  if (groups.length === 0) return null;
-
   const values = groups.map((g) => g.value).sort((a, b) => a - b);
-  const uniqueValues = [...new Set(values)];
+  const uniqueValues = groups.length > 0 ? [...new Set(values)] : [0];
+  const isPlaceholder = groups.length === 0;
 
   const maxFreq =
-    totalSamples > 0
+    isPlaceholder
+      ? 1
+      : totalSamples > 0
       ? Math.max(
           ...uniqueValues.map(
             (v) => (sampleCounts.get(v) ?? 0) / totalSamples
@@ -259,7 +260,7 @@ function DistributionChart({
         {/* Bars */}
         {uniqueValues.map((v, i) => {
           const count = sampleCounts.get(v) ?? 0;
-          const freq = totalSamples > 0 ? count / totalSamples : 0;
+          const freq = isPlaceholder ? 1 : totalSamples > 0 ? count / totalSamples : 0;
           const barH = (freq / Math.max(maxFreq, 1)) * chartH;
           const x = 44 + i * gap;
           const groupForColor = groups.find((g) => g.value === v);
@@ -270,11 +271,11 @@ function DistributionChart({
                 y={chartH + 4 - barH}
                 width={barW}
                 height={Math.max(barH, 0)}
-                fill={groupForColor?.color ?? "#ccc"}
+                fill={groupForColor?.color ?? "var(--hex-empty)"}
                 rx={3}
-                opacity={0.85}
+                opacity={isPlaceholder ? 1 : 0.85}
               />
-              {totalSamples > 0 && freq > 0.02 && (
+              {!isPlaceholder && totalSamples > 0 && freq > 0.02 && (
                 <text
                   x={x + barW / 2}
                   y={chartH - barH - 2}
@@ -339,6 +340,13 @@ export function RandomVariableViz() {
     uniA: 1,
     uniB: 4,
   });
+
+  const resetSamplingState = useCallback(() => {
+    setSampleCounts(new Map());
+    setTotalSamples(0);
+    setSampleDots([]);
+    setIsSampling(false);
+  }, []);
 
   // Assigned hex → group index lookup (memo for render, ref for handlers)
   const assignedHexMap = useMemo(() => {
@@ -491,11 +499,8 @@ export function RandomVariableViz() {
 
     setGroups(newGroups);
     setSelectedHexes(new Set());
-    setSampleCounts(new Map());
-    setTotalSamples(0);
-    setSampleDots([]);
-    setIsSampling(false);
-  }, [preset, totalHexes, hexes]);
+    resetSamplingState();
+  }, [preset, totalHexes, hexes, resetSamplingState]);
 
   // ── Sampling — falling dots ────────────────────────────────────────
   const doSample = useCallback(() => {
@@ -619,15 +624,12 @@ export function RandomVariableViz() {
   }, []);
 
   const handleReset = useCallback(() => {
-    setIsSampling(false);
     setGroups([]);
     setSelectedHexes(new Set());
-    setSampleCounts(new Map());
-    setTotalSamples(0);
-    setSampleDots([]);
+    resetSamplingState();
     setInputValue("");
     setPreset((p) => ({ ...p, type: "none" }));
-  }, []);
+  }, [resetSamplingState]);
 
   // ── Computed ──────────────────────────────────────────────────────
   const assignedCount = groups.reduce((sum, g) => sum + g.hexes.size, 0);
@@ -637,315 +639,318 @@ export function RandomVariableViz() {
   return (
     <div className="viz-layout">
       <div className="viz-container">
-      {/* Left panel */}
-      <div className="viz-panel-left">
-        <div className="viz-section">
-          <h2 className="viz-heading">Random Variable</h2>
-          <p className="viz-description">
-            Paint hexagons on the grid to select outcomes, then assign a numeric
-            value. This defines a random variable on a uniform probability
-            space.
-          </p>
-        </div>
+        {/* Left panel */}
+        <div className="viz-panel-left">
+          <div className="viz-section">
+            <h2 className="viz-heading">Random Variable</h2>
+            <p className="viz-description">
+              Paint hexagons on the grid to select outcomes, then assign a numeric
+              value. This defines a random variable on a uniform probability
+              space.
+            </p>
+          </div>
 
-        {/* ── Preset Distributions ─────────────────────────────────── */}
-        <div className="viz-section viz-preset-section">
-          <h3 className="viz-subheading">Preset Distributions</h3>
-          <div className="viz-preset-controls">
-            <Select
-              value={preset.type}
-              onValueChange={(val) =>
-                setPreset((p) => ({
-                  ...p,
-                  type: val as PresetType,
-                }))
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Custom…</SelectItem>
-                <SelectItem value="coin">Coin Toss (Bernoulli)</SelectItem>
-                <SelectItem value="d6">Fair Die (d6)</SelectItem>
-                <SelectItem value="binomial">Binomial</SelectItem>
-                <SelectItem value="uniform">Discrete Uniform</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {preset.type === "binomial" && (
-              <div className="viz-preset-params">
-                <label className="viz-param-label">
-                  n
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={preset.binN}
-                    onChange={(e) =>
-                      setPreset((p) => ({
-                        ...p,
-                        binN: Math.max(
-                          1,
-                          Math.min(20, parseInt(e.target.value) || 1)
-                        ),
-                      }))
-                    }
-                    className="viz-input viz-input-sm"
-                  />
-                </label>
-                <label className="viz-param-label">
-                  p
-                  <input
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={preset.binP}
-                    onChange={(e) =>
-                      setPreset((p) => ({
-                        ...p,
-                        binP: Math.max(
-                          0,
-                          Math.min(1, parseFloat(e.target.value) || 0)
-                        ),
-                      }))
-                    }
-                    className="viz-input viz-input-sm"
-                  />
-                </label>
-              </div>
-            )}
-
-            {preset.type === "uniform" && (
-              <div className="viz-preset-params">
-                <label className="viz-param-label">
-                  a
-                  <input
-                    type="number"
-                    value={preset.uniA}
-                    onChange={(e) =>
-                      setPreset((p) => ({
-                        ...p,
-                        uniA: parseInt(e.target.value) || 0,
-                      }))
-                    }
-                    className="viz-input viz-input-sm"
-                  />
-                </label>
-                <label className="viz-param-label">
-                  b
-                  <input
-                    type="number"
-                    value={preset.uniB}
-                    onChange={(e) =>
-                      setPreset((p) => ({
-                        ...p,
-                        uniB: parseInt(e.target.value) || 1,
-                      }))
-                    }
-                    className="viz-input viz-input-sm"
-                  />
-                </label>
-              </div>
-            )}
-
-            {preset.type !== "none" && (
-              <button
-                onClick={handleApplyPreset}
-                className="viz-btn viz-btn-assign"
-                disabled={
-                  preset.type === "uniform" && preset.uniA > preset.uniB
+          {/* ── Preset Distributions ─────────────────────────────────── */}
+          <div className="viz-section viz-preset-section">
+            <h3 className="viz-subheading">Preset Distributions</h3>
+            <div className="viz-preset-controls">
+              <Select
+                value={preset.type}
+                onValueChange={(val) =>
+                  setPreset((p) => ({
+                    ...p,
+                    type: val as PresetType,
+                  }))
                 }
               >
-                Apply Preset
-              </button>
-            )}
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Custom…</SelectItem>
+                  <SelectItem value="coin">Coin Toss (Bernoulli)</SelectItem>
+                  <SelectItem value="d6">Fair Die (d6)</SelectItem>
+                  <SelectItem value="binomial">Binomial</SelectItem>
+                  <SelectItem value="uniform">Discrete Uniform</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {preset.type === "binomial" && (
+                <div className="viz-preset-params">
+                  <label className="viz-param-label">
+                    n
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={preset.binN}
+                      onChange={(e) =>
+                        setPreset((p) => ({
+                          ...p,
+                          binN: Math.max(
+                            1,
+                            Math.min(20, parseInt(e.target.value) || 1)
+                          ),
+                        }))
+                      }
+                      className="viz-input viz-input-sm"
+                    />
+                  </label>
+                  <label className="viz-param-label">
+                    p
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={preset.binP}
+                      onChange={(e) =>
+                        setPreset((p) => ({
+                          ...p,
+                          binP: Math.max(
+                            0,
+                            Math.min(1, parseFloat(e.target.value) || 0)
+                          ),
+                        }))
+                      }
+                      className="viz-input viz-input-sm"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {preset.type === "uniform" && (
+                <div className="viz-preset-params">
+                  <label className="viz-param-label">
+                    a
+                    <input
+                      type="number"
+                      value={preset.uniA}
+                      onChange={(e) =>
+                        setPreset((p) => ({
+                          ...p,
+                          uniA: parseInt(e.target.value) || 0,
+                        }))
+                      }
+                      className="viz-input viz-input-sm"
+                    />
+                  </label>
+                  <label className="viz-param-label">
+                    b
+                    <input
+                      type="number"
+                      value={preset.uniB}
+                      onChange={(e) =>
+                        setPreset((p) => ({
+                          ...p,
+                          uniB: parseInt(e.target.value) || 1,
+                        }))
+                      }
+                      className="viz-input viz-input-sm"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {preset.type !== "none" && (
+                <button
+                  onClick={handleApplyPreset}
+                  className="viz-btn viz-btn-assign"
+                  disabled={
+                    preset.type === "uniform" && preset.uniA > preset.uniB
+                  }
+                >
+                  Apply Preset
+                </button>
+              )}
+            </div>
           </div>
-        </div>
 
-        <LegendTable groups={groups} />
+          <LegendTable groups={groups} />
 
-        {/* Unassigned hex info */}
-        <div className="viz-hex-info">
-          <span className="viz-hex-info-swatch viz-hex-unassigned" />
-          <span>
-            {unassignedCount} unassigned
-            {selectedHexes.size > 0 && (
-              <>
-                {" "}
-                · <strong>{selectedHexes.size} selected</strong>
-              </>
-            )}
-          </span>
-        </div>
-
-        {/* Assignment controls */}
-        <div className="viz-assign-controls">
-          <input
-            type="number"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Value…"
-            className="viz-input"
-            disabled={selectedHexes.size === 0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleAssign();
-            }}
-          />
-          <button
-            onClick={handleAssign}
-            className="viz-btn viz-btn-assign"
-            disabled={
-              selectedHexes.size === 0 ||
-              inputValue === "" ||
-              isNaN(parseFloat(inputValue))
-            }
-          >
-            Assign Value
-          </button>
-        </div>
-
-        {/* Sampling section */}
-        <div className="viz-section viz-sample-section">
-          <h3 className="viz-subheading">Sampling</h3>
-          <p className="viz-description">
-            Sample from the probability space to generate the empirical
-            distribution of your random variable.
-          </p>
-          <div className="viz-sample-controls">
-            {!isSampling ? (
-              <button
-                onClick={handleStartSampling}
-                className="viz-btn viz-btn-sample"
-                disabled={assignedCount === 0}
-              >
-                Sample Distribution
-              </button>
-            ) : (
-              <button
-                onClick={handleStopSampling}
-                className="viz-btn viz-btn-pause"
-              >
-                Pause
-              </button>
-            )}
-            <button onClick={handleReset} className="viz-btn viz-btn-reset">
-              Reset
-            </button>
-            {totalSamples > 0 && (
-              <span className="viz-sample-count">n = {totalSamples}</span>
-            )}
+          {/* Unassigned hex info */}
+          <div className="viz-hex-info">
+            <span className="viz-hex-info-swatch viz-hex-unassigned" />
+            <span>
+              {unassignedCount} unassigned
+              {selectedHexes.size > 0 && (
+                <>
+                  {" "}
+                  · <strong>{selectedHexes.size} selected</strong>
+                </>
+              )}
+            </span>
           </div>
-        </div>
-      </div>
 
-      {/* Right panel — hex grid */}
-      <div className="viz-panel-right">
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${gridW} ${gridH}`}
-          className="viz-hex-svg"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        >
-          <defs>
-            {/* Circular glow — generous filter region prevents square clipping */}
-            <filter
-              id="dot-glow"
-              x="-100%"
-              y="-100%"
-              width="300%"
-              height="300%"
-              filterUnits="objectBoundingBox"
-            >
-              <feGaussianBlur stdDeviation="3" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-
-          {hexes.map((hex) => {
-            const center = hexToPixel(hex.col, hex.row, HEX_SIZE);
-            const cx = center.x + GRID_OFFSET_X;
-            const cy = center.y + GRID_OFFSET_Y;
-            const key = hexKey(hex.col, hex.row);
-            const isSelected = selectedHexes.has(key);
-            const groupIdx = assignedHexMap.get(key);
-            const isAssigned = groupIdx !== undefined;
-            const group = isAssigned ? groups[groupIdx] : null;
-
-            let fill = "var(--hex-empty)";
-            let strokeColor = "var(--hex-stroke)";
-            let strokeW = 1;
-
-            if (isAssigned && group) {
-              fill = group.color;
-              strokeColor = group.color;
-              strokeW = 1.5;
-            } else if (isSelected) {
-              fill = "var(--hex-selected)";
-              strokeColor = "var(--hex-selected-stroke)";
-              strokeW = 2;
-            }
-
-            return (
-              <polygon
-                key={key}
-                points={hexCorners(cx, cy, HEX_SIZE - 1.5)}
-                fill={fill}
-                stroke={strokeColor}
-                strokeWidth={strokeW}
-                className="viz-hex"
-                data-col={hex.col}
-                data-row={hex.row}
-              />
-            );
-          })}
-
-          {/* Falling sample dots */}
-          {sampleDots.map((dot) => (
-            <motion.circle
-              key={dot.id}
-              cx={dot.x}
-              cy={dot.y}
-              r={5}
-              fill={dot.color}
-              initial={{ y: -(dot.y - 5), opacity: 0.85 }}
-              animate={{
-                y: 0,
-                opacity:
-                  dot.phase === "fading"
-                    ? 0
-                    : 0.9,
+          {/* Assignment controls */}
+          <div className="viz-assign-controls">
+            <input
+              type="number"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder="Value…"
+              className="viz-input"
+              disabled={selectedHexes.size === 0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAssign();
               }}
-              transition={{
-                y: {
-                  duration: dot.fallDuration,
-                  ease: [0.42, 0, 1, 1],
-                },
-                opacity: {
-                  duration: dot.phase === "fading" ? 0.25 : 0.15,
-                },
-              }}
-              filter="url(#dot-glow)"
-              className="viz-sample-dot"
             />
-          ))}
-        </svg>
-      </div>
+            <button
+              onClick={handleAssign}
+              className="viz-btn viz-btn-assign"
+              disabled={
+                selectedHexes.size === 0 ||
+                inputValue === "" ||
+                isNaN(parseFloat(inputValue))
+              }
+            >
+              Assign Value
+            </button>
+          </div>
+        </div>
+
+        {/* Right panel — workspace */}
+        <div className="viz-panel-right">
+          <div className="viz-grid-frame">
+            <svg
+              ref={svgRef}
+              viewBox={`0 0 ${gridW} ${gridH}`}
+              className="viz-hex-svg"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            >
+              <defs>
+                {/* Circular glow — generous filter region prevents square clipping */}
+                <filter
+                  id="dot-glow"
+                  x="-100%"
+                  y="-100%"
+                  width="300%"
+                  height="300%"
+                  filterUnits="objectBoundingBox"
+                >
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              {hexes.map((hex) => {
+                const center = hexToPixel(hex.col, hex.row, HEX_SIZE);
+                const cx = center.x + GRID_OFFSET_X;
+                const cy = center.y + GRID_OFFSET_Y;
+                const key = hexKey(hex.col, hex.row);
+                const isSelected = selectedHexes.has(key);
+                const groupIdx = assignedHexMap.get(key);
+                const isAssigned = groupIdx !== undefined;
+                const group = isAssigned ? groups[groupIdx] : null;
+
+                let fill = "var(--hex-empty)";
+                let strokeColor = "var(--hex-stroke)";
+                let strokeW = 1;
+
+                if (isAssigned && group) {
+                  fill = group.color;
+                  strokeColor = group.color;
+                  strokeW = 1.5;
+                } else if (isSelected) {
+                  fill = "var(--hex-selected)";
+                  strokeColor = "var(--hex-selected-stroke)";
+                  strokeW = 2;
+                }
+
+                return (
+                  <polygon
+                    key={key}
+                    points={hexCorners(cx, cy, HEX_SIZE - 1.5)}
+                    fill={fill}
+                    stroke={strokeColor}
+                    strokeWidth={strokeW}
+                    className="viz-hex"
+                    data-col={hex.col}
+                    data-row={hex.row}
+                  />
+                );
+              })}
+
+              {/* Falling sample dots */}
+              {sampleDots.map((dot) => (
+                <motion.circle
+                  key={dot.id}
+                  cx={dot.x}
+                  cy={dot.y}
+                  r={5}
+                  fill={dot.color}
+                  initial={{ y: -(dot.y - 5), opacity: 0.85 }}
+                  animate={{
+                    y: 0,
+                    opacity:
+                      dot.phase === "fading"
+                        ? 0
+                        : 0.9,
+                  }}
+                  transition={{
+                    y: {
+                      duration: dot.fallDuration,
+                      ease: [0.42, 0, 1, 1],
+                    },
+                    opacity: {
+                      duration: dot.phase === "fading" ? 0.25 : 0.15,
+                    },
+                  }}
+                  filter="url(#dot-glow)"
+                  className="viz-sample-dot"
+                />
+              ))}
+            </svg>
+          </div>
+        </div>
       </div>
 
-      {/* Distribution chart — full width below grid */}
-      <DistributionChart
-        groups={groups}
-        sampleCounts={sampleCounts}
-        totalSamples={totalSamples}
-      />
+      <div className="viz-results-row">
+        <div className="viz-results-sidebar">
+          <div className="viz-section viz-sample-section">
+            <h3 className="viz-subheading">Sampling</h3>
+            <p className="viz-description">
+              Sample from the probability space to generate the empirical
+              distribution of your random variable.
+            </p>
+            <div className="viz-sample-controls">
+              {!isSampling ? (
+                <button
+                  onClick={handleStartSampling}
+                  className="viz-btn viz-btn-sample"
+                  disabled={assignedCount === 0}
+                >
+                  Sample Distribution
+                </button>
+              ) : (
+                <button
+                  onClick={handleStopSampling}
+                  className="viz-btn viz-btn-pause"
+                >
+                  Pause
+                </button>
+              )}
+              <button onClick={handleReset} className="viz-btn viz-btn-reset">
+                Reset
+              </button>
+              <span className="viz-sample-count">n = {totalSamples}</span>
+            </div>
+          </div>
+        </div>
+        <div className="viz-results-main">
+          <DistributionChart
+            groups={groups}
+            sampleCounts={sampleCounts}
+            totalSamples={totalSamples}
+          />
+        </div>
+      </div>
     </div>
   );
 }
