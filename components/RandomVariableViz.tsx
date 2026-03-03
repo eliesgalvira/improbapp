@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { hexCorners, hexKey, hexToPixel, pixelToHex, generateHexGrid } from "@/lib/hex";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -56,9 +59,7 @@ const subheadingClass =
   "mb-1 font-mono text-[0.8rem] font-bold uppercase tracking-[0.16em] text-[#544e44]";
 const descriptionClass = "text-sm leading-6 text-[#7a7468]";
 const inputClass =
-  "min-w-0 flex-1 rounded-[12px] border border-[#e4e0d8] bg-white px-3 py-2 font-mono text-sm text-[#1a1a2e] outline-none transition focus:border-[#2d6a4f] focus:ring-4 focus:ring-[#d8f3dc] disabled:cursor-not-allowed disabled:opacity-50";
-const buttonBaseClass =
-  "inline-flex items-center justify-center rounded-[12px] px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40";
+  "min-w-0 font-mono text-sm text-[#1a1a2e] placeholder:text-[#7a7468] focus-visible:border-[#2d6a4f] focus-visible:ring-[#d8f3dc]";
 
 interface HexGroup {
   value: number;
@@ -326,6 +327,15 @@ function DistributionChart({
 }
 
 export function RandomVariableViz() {
+  const presetTypeId = useId();
+  const assignValueId = useId();
+  const assignHelpId = useId();
+  const binNId = useId();
+  const binPId = useId();
+  const uniformAId = useId();
+  const uniformBId = useId();
+  const uniformHelpId = useId();
+
   const hexes = useMemo(() => generateHexGrid(HEX_COLS, HEX_ROWS), []);
   const totalHexes = hexes.length;
 
@@ -343,6 +353,12 @@ export function RandomVariableViz() {
     binP: 0.5,
     uniA: 1,
     uniB: 4,
+  });
+  const [presetInputText, setPresetInputText] = useState({
+    binN: "5",
+    binP: "0.5",
+    uniA: "1",
+    uniB: "4",
   });
 
   const samplingRef = useRef(false);
@@ -591,10 +607,17 @@ export function RandomVariableViz() {
     resetSamplingState();
     setInputValue("");
     setPreset((prev) => ({ ...prev, type: "none" }));
+    setPresetInputText({
+      binN: "5",
+      binP: "0.5",
+      uniA: "1",
+      uniB: "4",
+    });
   }, [resetSamplingState]);
 
   const assignedCount = groups.reduce((sum, group) => sum + group.hexes.size, 0);
   const unassignedCount = totalHexes - assignedCount;
+  const uniformRangeInvalid = preset.uniA > preset.uniB;
 
   return (
     <div className="flex flex-col gap-8">
@@ -611,13 +634,22 @@ export function RandomVariableViz() {
           <div className={cn(sectionClass, "border-l-[3px] border-l-[#d8f3dc]")}>
             <h3 className={subheadingClass}>Preset Distributions</h3>
             <div className="mt-2 flex flex-col gap-2">
+              <div className="space-y-2">
+                <Label htmlFor={presetTypeId} className="font-mono text-[0.78rem] uppercase tracking-[0.14em] text-[#544e44]">
+                  Distribution Type
+                </Label>
+              </div>
               <Select
                 value={preset.type}
                 onValueChange={(value) =>
                   setPreset((prev) => ({ ...prev, type: value as PresetType }))
                 }
               >
-                <SelectTrigger className="w-full border-[#e4e0d8] bg-white">
+                <SelectTrigger
+                  id={presetTypeId}
+                  aria-label="Distribution type"
+                  className="w-full border-[#e4e0d8] bg-white"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -630,87 +662,153 @@ export function RandomVariableViz() {
               </Select>
 
               {preset.type === "binomial" && (
-                <div className="flex flex-wrap gap-3">
-                  <label className="flex items-center gap-1.5 font-mono text-[0.78rem] font-bold uppercase tracking-[0.14em] text-[#7a7468]">
-                    n
-                    <input
+                <fieldset className="grid gap-3 sm:grid-cols-2" aria-label="Binomial parameters">
+                  <div className="space-y-2">
+                    <Label htmlFor={binNId} className="font-mono text-[0.78rem] uppercase tracking-[0.14em] text-[#544e44]">
+                      n
+                    </Label>
+                    <Input
+                      id={binNId}
                       type="number"
+                      inputMode="numeric"
                       min={1}
                       max={20}
-                      value={preset.binN}
-                      onChange={(event) =>
+                      step={1}
+                      value={presetInputText.binN}
+                      onChange={(event) => {
+                        const next = event.target.value;
+                        setPresetInputText((prev) => ({ ...prev, binN: next }));
+                        if (next === "") return;
+                        const parsed = parseInt(next, 10);
+                        if (Number.isNaN(parsed)) return;
                         setPreset((prev) => ({
                           ...prev,
-                          binN: Math.max(1, Math.min(20, parseInt(event.target.value) || 1)),
+                          binN: Math.max(1, Math.min(20, parsed)),
+                        }));
+                      }}
+                      onBlur={() =>
+                        setPresetInputText((prev) => ({
+                          ...prev,
+                          binN: String(preset.binN),
                         }))
                       }
-                      className={cn(inputClass, "h-9 w-16 flex-none px-2.5 py-1.5 text-[0.82rem]")}
+                      className={cn(inputClass, "h-9")}
                     />
-                  </label>
-                  <label className="flex items-center gap-1.5 font-mono text-[0.78rem] font-bold uppercase tracking-[0.14em] text-[#7a7468]">
-                    p
-                    <input
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={binPId} className="font-mono text-[0.78rem] uppercase tracking-[0.14em] text-[#544e44]">
+                      p
+                    </Label>
+                    <Input
+                      id={binPId}
                       type="number"
+                      inputMode="decimal"
                       min={0}
                       max={1}
                       step={0.05}
-                      value={preset.binP}
-                      onChange={(event) =>
+                      value={presetInputText.binP}
+                      onChange={(event) => {
+                        const next = event.target.value;
+                        setPresetInputText((prev) => ({ ...prev, binP: next }));
+                        if (next === "") return;
+                        const parsed = parseFloat(next);
+                        if (Number.isNaN(parsed)) return;
                         setPreset((prev) => ({
                           ...prev,
-                          binP: Math.max(0, Math.min(1, parseFloat(event.target.value) || 0)),
+                          binP: Math.max(0, Math.min(1, parsed)),
+                        }));
+                      }}
+                      onBlur={() =>
+                        setPresetInputText((prev) => ({
+                          ...prev,
+                          binP: String(preset.binP),
                         }))
                       }
-                      className={cn(inputClass, "h-9 w-16 flex-none px-2.5 py-1.5 text-[0.82rem]")}
+                      className={cn(inputClass, "h-9")}
                     />
-                  </label>
-                </div>
+                  </div>
+                </fieldset>
               )}
 
               {preset.type === "uniform" && (
-                <div className="flex flex-wrap gap-3">
-                  <label className="flex items-center gap-1.5 font-mono text-[0.78rem] font-bold uppercase tracking-[0.14em] text-[#7a7468]">
-                    a
-                    <input
+                <fieldset className="grid gap-3 sm:grid-cols-2" aria-describedby={uniformHelpId}>
+                  <div className="space-y-2">
+                    <Label htmlFor={uniformAId} className="font-mono text-[0.78rem] uppercase tracking-[0.14em] text-[#544e44]">
+                      Minimum a
+                    </Label>
+                    <Input
+                      id={uniformAId}
                       type="number"
-                      value={preset.uniA}
-                      onChange={(event) =>
-                        setPreset((prev) => ({
+                      inputMode="numeric"
+                      value={presetInputText.uniA}
+                      aria-invalid={uniformRangeInvalid}
+                      onChange={(event) => {
+                        const next = event.target.value;
+                        setPresetInputText((prev) => ({ ...prev, uniA: next }));
+                        if (next === "" || next === "-") return;
+                        const parsed = parseInt(next, 10);
+                        if (Number.isNaN(parsed)) return;
+                        setPreset((prev) => ({ ...prev, uniA: parsed }));
+                      }}
+                      onBlur={() =>
+                        setPresetInputText((prev) => ({
                           ...prev,
-                          uniA: parseInt(event.target.value) || 0,
+                          uniA: String(preset.uniA),
                         }))
                       }
-                      className={cn(inputClass, "h-9 w-16 flex-none px-2.5 py-1.5 text-[0.82rem]")}
+                      className={cn(inputClass, "h-9")}
                     />
-                  </label>
-                  <label className="flex items-center gap-1.5 font-mono text-[0.78rem] font-bold uppercase tracking-[0.14em] text-[#7a7468]">
-                    b
-                    <input
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={uniformBId} className="font-mono text-[0.78rem] uppercase tracking-[0.14em] text-[#544e44]">
+                      Maximum b
+                    </Label>
+                    <Input
+                      id={uniformBId}
                       type="number"
-                      value={preset.uniB}
-                      onChange={(event) =>
-                        setPreset((prev) => ({
+                      inputMode="numeric"
+                      value={presetInputText.uniB}
+                      aria-invalid={uniformRangeInvalid}
+                      onChange={(event) => {
+                        const next = event.target.value;
+                        setPresetInputText((prev) => ({ ...prev, uniB: next }));
+                        if (next === "" || next === "-") return;
+                        const parsed = parseInt(next, 10);
+                        if (Number.isNaN(parsed)) return;
+                        setPreset((prev) => ({ ...prev, uniB: parsed }));
+                      }}
+                      onBlur={() =>
+                        setPresetInputText((prev) => ({
                           ...prev,
-                          uniB: parseInt(event.target.value) || 1,
+                          uniB: String(preset.uniB),
                         }))
                       }
-                      className={cn(inputClass, "h-9 w-16 flex-none px-2.5 py-1.5 text-[0.82rem]")}
+                      className={cn(inputClass, "h-9")}
                     />
-                  </label>
-                </div>
+                  </div>
+                  <p
+                    id={uniformHelpId}
+                    className={cn(
+                      "sm:col-span-2 text-sm",
+                      uniformRangeInvalid ? "text-destructive" : "text-[#7a7468]"
+                    )}
+                  >
+                    {uniformRangeInvalid
+                      ? "The upper bound must be greater than or equal to the lower bound."
+                      : "Define the inclusive integer range [a, b]."}
+                  </p>
+                </fieldset>
               )}
 
               {preset.type !== "none" && (
-                <button
+                <Button
                   onClick={handleApplyPreset}
-                  className={cn(
-                    buttonBaseClass,
-                    "w-full bg-[#2d6a4f] text-white hover:bg-[#1b4332]"
-                  )}
-                  disabled={preset.type === "uniform" && preset.uniA > preset.uniB}
+                  type="button"
+                  className="w-full rounded-[12px] bg-[#2d6a4f] text-white hover:bg-[#1b4332]"
+                  disabled={uniformRangeInvalid}
                 >
                   Apply Preset
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -733,24 +831,35 @@ export function RandomVariableViz() {
             </span>
           </div>
 
-          <div className="flex flex-wrap items-stretch gap-2 max-[1100px]:[&>*]:basis-full">
-            <input
-              type="number"
-              value={inputValue}
-              onChange={(event) => setInputValue(event.target.value)}
-              placeholder="Value…"
-              className={inputClass}
-              disabled={selectedHexes.size === 0}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") handleAssign();
-              }}
-            />
-            <button
+          <div className="flex flex-wrap items-end gap-2 max-[1100px]:[&>*]:basis-full">
+            <div className="min-w-0 flex-1 space-y-2">
+              <Label htmlFor={assignValueId} className="font-mono text-[0.78rem] uppercase tracking-[0.14em] text-[#544e44]">
+                Assigned Value
+              </Label>
+              <Input
+                id={assignValueId}
+                type="number"
+                inputMode="decimal"
+                value={inputValue}
+                onChange={(event) => setInputValue(event.target.value)}
+                placeholder="Value…"
+                aria-describedby={assignHelpId}
+                className={inputClass}
+                disabled={selectedHexes.size === 0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") handleAssign();
+                }}
+              />
+              <p id={assignHelpId} className="text-sm text-[#7a7468]">
+                {selectedHexes.size === 0
+                  ? "Select one or more hexagons to enable value assignment."
+                  : `Assign a numeric value to ${selectedHexes.size} selected hexagon${selectedHexes.size === 1 ? "" : "s"}.`}
+              </p>
+            </div>
+            <Button
               onClick={handleAssign}
-              className={cn(
-                buttonBaseClass,
-                "shrink-0 bg-[#2d6a4f] text-white hover:bg-[#1b4332]"
-              )}
+              type="button"
+              className="shrink-0 rounded-[12px] bg-[#2d6a4f] text-white hover:bg-[#1b4332]"
               disabled={
                 selectedHexes.size === 0 ||
                 inputValue === "" ||
@@ -758,7 +867,7 @@ export function RandomVariableViz() {
               }
             >
               Assign Value
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -859,30 +968,31 @@ export function RandomVariableViz() {
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {!isSampling ? (
-                <button
+                <Button
                   onClick={handleStartSampling}
-                  className={cn(buttonBaseClass, "bg-[#1a1a2e] text-[#faf9f6] hover:bg-[#2a2a3e]")}
+                  type="button"
+                  className="rounded-[12px] bg-[#1a1a2e] text-[#faf9f6] hover:bg-[#2a2a3e]"
                   disabled={assignedCount === 0}
                 >
                   Sample Distribution
-                </button>
+                </Button>
               ) : (
-                <button
+                <Button
                   onClick={handleStopSampling}
-                  className={cn(buttonBaseClass, "bg-[#e65100] text-white hover:bg-[#bf360c]")}
+                  type="button"
+                  className="rounded-[12px] bg-[#e65100] text-white hover:bg-[#bf360c]"
                 >
                   Pause
-                </button>
+                </Button>
               )}
-              <button
+              <Button
                 onClick={handleReset}
-                className={cn(
-                  buttonBaseClass,
-                  "border border-[#e4e0d8] bg-[#f4f2ee] text-[#544e44] hover:border-[#d32f2f] hover:bg-[#ffebee] hover:text-[#d32f2f]"
-                )}
+                type="button"
+                variant="outline"
+                className="rounded-[12px] border-[#e4e0d8] bg-[#f4f2ee] text-[#544e44] hover:border-[#d32f2f] hover:bg-[#ffebee] hover:text-[#d32f2f]"
               >
                 Reset
-              </button>
+              </Button>
               <span className="ml-auto min-w-max font-mono text-[0.78rem] text-[#7a7468] max-sm:w-full max-sm:ml-0">
                 n = {totalSamples}
               </span>
