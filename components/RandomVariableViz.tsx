@@ -225,7 +225,7 @@ function DistributionChart({
           )
         : 1;
 
-  const chartH = 220;
+  const chartH = 180;
   const chartW = Math.max(uniqueValues.length * 72, 320);
   const barW = 40;
   const gap = 72;
@@ -235,10 +235,10 @@ function DistributionChart({
       <div className={headingClass}>Empirical Distribution</div>
       <svg
         width="100%"
-        height={chartH + 48}
+        height={240}
         viewBox={`0 0 ${chartW + 48} ${chartH + 48}`}
-        preserveAspectRatio="none"
-        className="block min-w-0 overflow-visible"
+        preserveAspectRatio="xMidYMid meet"
+        className="block w-full min-w-0 overflow-visible"
       >
         <line
           x1={36}
