@@ -15,8 +15,8 @@ export interface HexPixel {
  * For flat-top: x = size * 3/2 * col, y = size * sqrt(3) * (row + 0.5 * (col & 1))
  */
 export function hexToPixel(col: number, row: number, size: number): HexPixel {
-  const x = size * 1.5 * col;
-  const y = size * Math.sqrt(3) * (row + 0.5 * (col % 2));
+  const x = Math.round(size * 1.5 * col * 100) / 100;
+  const y = Math.round(size * Math.sqrt(3) * (row + 0.5 * (col % 2)) * 100) / 100;
   return { x, y };
 }
 
@@ -27,8 +27,8 @@ export function hexCorners(cx: number, cy: number, size: number): string {
   const points: string[] = [];
   for (let i = 0; i < 6; i++) {
     const angle = (Math.PI / 180) * (60 * i);
-    const px = cx + size * Math.cos(angle);
-    const py = cy + size * Math.sin(angle);
+    const px = Math.round((cx + size * Math.cos(angle)) * 100) / 100;
+    const py = Math.round((cy + size * Math.sin(angle)) * 100) / 100;
     points.push(`${px},${py}`);
   }
   return points.join(" ");

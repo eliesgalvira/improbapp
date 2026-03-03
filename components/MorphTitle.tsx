@@ -16,7 +16,7 @@ const FRAMES = [
 ];
 
 // ── Timing ────────────────────────────────────────────────────────────
-const INTERVAL_MS = 1400; // dwell time on each phrase before morphing
+const INTERVAL_MS = 2800; // dwell time on each phrase before morphing
 
 // ── Component ─────────────────────────────────────────────────────────
 export function MorphTitle() {
