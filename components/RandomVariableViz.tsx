@@ -20,6 +20,7 @@ const HEX_ROWS = 10;
 const HEX_SIZE = 28;
 const GRID_OFFSET_X = 40;
 const GRID_OFFSET_Y = 40;
+const BASE_SAMPLE_INTERVAL_MS = 180;
 
 const DOT_COLOR = "#0a0a0a";
 const GROUP_COLORS = [
@@ -330,6 +331,8 @@ export function RandomVariableViz() {
   const presetTypeId = useId();
   const assignValueId = useId();
   const assignHelpId = useId();
+  const fallRateId = useId();
+  const fallRateHelpId = useId();
   const binNId = useId();
   const binPId = useId();
   const uniformAId = useId();
@@ -347,6 +350,7 @@ export function RandomVariableViz() {
   const [totalSamples, setTotalSamples] = useState(0);
   const [isSampling, setIsSampling] = useState(false);
   const [sampleDots, setSampleDots] = useState<SampleDot[]>([]);
+  const [fallSpeed, setFallSpeed] = useState(1.5);
   const [preset, setPreset] = useState<PresetConfig>({
     type: "none",
     binN: 5,
@@ -362,6 +366,7 @@ export function RandomVariableViz() {
   });
 
   const samplingRef = useRef(false);
+  const fallSpeedRef = useRef(fallSpeed);
   const dotIdRef = useRef(0);
   const svgRef = useRef<SVGSVGElement>(null);
   const dragModeRef = useRef<"paint" | "erase" | null>(null);
@@ -371,6 +376,10 @@ export function RandomVariableViz() {
   useEffect(() => {
     selectedHexesRef.current = selectedHexes;
   }, [selectedHexes]);
+
+  useEffect(() => {
+    fallSpeedRef.current = fallSpeed;
+  }, [fallSpeed]);
 
   const resetSamplingState = useCallback(() => {
     setSampleCounts(new Map());
@@ -535,7 +544,7 @@ export function RandomVariableViz() {
       setTotalSamples((prev) => prev + 1);
     }
 
-    const fallDuration = 0.3 + 0.15 * (landY / gridH);
+    const fallDuration = (0.45 + 0.2 * (landY / gridH)) / fallSpeedRef.current;
     const dotId = dotIdRef.current++;
     const newDot: SampleDot = {
       id: dotId,
@@ -582,12 +591,24 @@ export function RandomVariableViz() {
     if (!isSampling) return;
 
     samplingRef.current = true;
-    const interval = setInterval(() => {
-      if (samplingRef.current) doSample();
-    }, 180);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = () => {
+      if (!samplingRef.current) return;
+      doSample();
+      timeoutId = setTimeout(
+        scheduleNext,
+        Math.max(45, BASE_SAMPLE_INTERVAL_MS / fallSpeedRef.current)
+      );
+    };
+
+    timeoutId = setTimeout(
+      scheduleNext,
+      Math.max(45, BASE_SAMPLE_INTERVAL_MS / fallSpeedRef.current)
+    );
 
     return () => {
-      clearInterval(interval);
+      if (timeoutId) clearTimeout(timeoutId);
       samplingRef.current = false;
     };
   }, [doSample, isSampling]);
@@ -966,6 +987,33 @@ export function RandomVariableViz() {
               Sample from the probability space to generate the empirical distribution
               of your random variable.
             </p>
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label
+                  htmlFor={fallRateId}
+                  className="font-mono text-[0.78rem] uppercase tracking-[0.14em] text-[#544e44]"
+                >
+                  Fall Rate
+                </Label>
+                <span className="font-mono text-[0.78rem] text-[#7a7468]">
+                  {fallSpeed.toFixed(1)}x
+                </span>
+              </div>
+              <input
+                id={fallRateId}
+                type="range"
+                min={0.5}
+                max={4}
+                step={0.1}
+                value={fallSpeed}
+                aria-describedby={fallRateHelpId}
+                onChange={(event) => setFallSpeed(parseFloat(event.target.value))}
+                className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[#d8f3dc] accent-[#2d6a4f]"
+              />
+              <p id={fallRateHelpId} className="text-sm text-[#7a7468]">
+                Higher values make dots fall faster.
+              </p>
+            </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {!isSampling ? (
                 <Button
