@@ -78,12 +78,20 @@ interface SampleDot {
   fallDuration: number;
 }
 
-type PresetType = "none" | "coin" | "d6" | "binomial" | "uniform";
+type PresetType =
+  | "none"
+  | "coin"
+  | "d6"
+  | "binomial"
+  | "uniform"
+  | "gaussian";
 
 interface PresetConfig {
   type: PresetType;
   binN: number;
   binP: number;
+  gaussMean: number;
+  gaussStdDev: number;
   uniA: number;
   uniB: number;
 }
@@ -118,6 +126,25 @@ function getDistributionBins(
         value: k,
         prob:
           binomialCoeff(n, k) * Math.pow(p, k) * Math.pow(1 - p, n - k),
+      }));
+    }
+    case "gaussian": {
+      const { gaussMean: mean, gaussStdDev: stdDev } = preset;
+      if (stdDev <= 0) return [];
+
+      const min = Math.floor(mean - 3 * stdDev);
+      const max = Math.ceil(mean + 3 * stdDev);
+      const weights = Array.from({ length: max - min + 1 }, (_, i) => {
+        const value = min + i;
+        const exponent = -((value - mean) ** 2) / (2 * stdDev ** 2);
+        return { value, weight: Math.exp(exponent) };
+      });
+      const totalWeight = weights.reduce((sum, bin) => sum + bin.weight, 0);
+      if (totalWeight === 0) return [];
+
+      return weights.map(({ value, weight }) => ({
+        value,
+        prob: weight / totalWeight,
       }));
     }
     case "uniform": {
@@ -335,8 +362,11 @@ export function RandomVariableViz() {
   const fallRateHelpId = useId();
   const binNId = useId();
   const binPId = useId();
+  const gaussMeanId = useId();
+  const gaussStdDevId = useId();
   const uniformAId = useId();
   const uniformBId = useId();
+  const gaussianHelpId = useId();
   const uniformHelpId = useId();
 
   const hexes = useMemo(() => generateHexGrid(HEX_COLS, HEX_ROWS), []);
@@ -355,12 +385,16 @@ export function RandomVariableViz() {
     type: "none",
     binN: 5,
     binP: 0.5,
+    gaussMean: 0,
+    gaussStdDev: 1,
     uniA: 1,
     uniB: 4,
   });
   const [presetInputText, setPresetInputText] = useState({
     binN: "5",
     binP: "0.5",
+    gaussMean: "0",
+    gaussStdDev: "1",
     uniA: "1",
     uniB: "4",
   });
@@ -631,6 +665,8 @@ export function RandomVariableViz() {
     setPresetInputText({
       binN: "5",
       binP: "0.5",
+      gaussMean: "0",
+      gaussStdDev: "1",
       uniA: "1",
       uniB: "4",
     });
@@ -638,6 +674,7 @@ export function RandomVariableViz() {
 
   const assignedCount = groups.reduce((sum, group) => sum + group.hexes.size, 0);
   const unassignedCount = totalHexes - assignedCount;
+  const gaussianStdDevInvalid = preset.gaussStdDev <= 0;
   const uniformRangeInvalid = preset.uniA > preset.uniB;
 
   return (
@@ -678,6 +715,7 @@ export function RandomVariableViz() {
                   <SelectItem value="coin">Coin Toss (Bernoulli)</SelectItem>
                   <SelectItem value="d6">Fair Die (d6)</SelectItem>
                   <SelectItem value="binomial">Binomial</SelectItem>
+                  <SelectItem value="gaussian">Discrete Gaussian</SelectItem>
                   <SelectItem value="uniform">Discrete Uniform</SelectItem>
                 </SelectContent>
               </Select>
@@ -748,6 +786,81 @@ export function RandomVariableViz() {
                       className={cn(inputClass, "h-9")}
                     />
                   </div>
+                </fieldset>
+              )}
+
+              {preset.type === "gaussian" && (
+                <fieldset
+                  className="grid gap-3 sm:grid-cols-2"
+                  aria-describedby={gaussianHelpId}
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor={gaussMeanId} className="font-mono text-[0.78rem] uppercase tracking-[0.14em] text-[#544e44]">
+                      Mean μ
+                    </Label>
+                    <Input
+                      id={gaussMeanId}
+                      type="number"
+                      inputMode="decimal"
+                      step={0.5}
+                      value={presetInputText.gaussMean}
+                      onChange={(event) => {
+                        const next = event.target.value;
+                        setPresetInputText((prev) => ({ ...prev, gaussMean: next }));
+                        if (next === "" || next === "-") return;
+                        const parsed = parseFloat(next);
+                        if (Number.isNaN(parsed)) return;
+                        setPreset((prev) => ({ ...prev, gaussMean: parsed }));
+                      }}
+                      onBlur={() =>
+                        setPresetInputText((prev) => ({
+                          ...prev,
+                          gaussMean: String(preset.gaussMean),
+                        }))
+                      }
+                      className={cn(inputClass, "h-9")}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={gaussStdDevId} className="font-mono text-[0.78rem] uppercase tracking-[0.14em] text-[#544e44]">
+                      Std Dev σ
+                    </Label>
+                    <Input
+                      id={gaussStdDevId}
+                      type="number"
+                      inputMode="decimal"
+                      min={0.1}
+                      step={0.1}
+                      value={presetInputText.gaussStdDev}
+                      aria-invalid={gaussianStdDevInvalid}
+                      onChange={(event) => {
+                        const next = event.target.value;
+                        setPresetInputText((prev) => ({ ...prev, gaussStdDev: next }));
+                        if (next === "" || next === "-" || next === ".") return;
+                        const parsed = parseFloat(next);
+                        if (Number.isNaN(parsed)) return;
+                        setPreset((prev) => ({ ...prev, gaussStdDev: parsed }));
+                      }}
+                      onBlur={() =>
+                        setPresetInputText((prev) => ({
+                          ...prev,
+                          gaussStdDev: String(preset.gaussStdDev),
+                        }))
+                      }
+                      className={cn(inputClass, "h-9")}
+                    />
+                  </div>
+                  <p
+                    id={gaussianHelpId}
+                    className={cn(
+                      "sm:col-span-2 text-sm",
+                      gaussianStdDevInvalid ? "text-destructive" : "text-[#7a7468]"
+                    )}
+                  >
+                    {gaussianStdDevInvalid
+                      ? "The standard deviation must be greater than 0."
+                      : "Assigns integer values over the range [μ - 3σ, μ + 3σ], normalized to a discrete Gaussian."}
+                  </p>
                 </fieldset>
               )}
 
@@ -826,7 +939,7 @@ export function RandomVariableViz() {
                   onClick={handleApplyPreset}
                   type="button"
                   className="w-full rounded-[12px] bg-[#2d6a4f] text-white hover:bg-[#1b4332]"
-                  disabled={uniformRangeInvalid}
+                  disabled={gaussianStdDevInvalid || uniformRangeInvalid}
                 >
                   Apply Preset
                 </Button>
